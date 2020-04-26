@@ -1,7 +1,5 @@
-pub mod can;
-
 pub mod prelude {
-    pub use crate::can::{
+    pub use embedded_hal::can::{
         Frame as _, Id as _, MessageFilter as _, Receiver as _, Transmitter as _,
     };
 }
@@ -13,7 +11,7 @@ use std::{
     ptr,
 };
 
-use can::Receiver as _;
+use embedded_hal::can::{self, Receiver as _};
 use pcan_basic_sys::*;
 use winapi::{
     shared::minwindef::FALSE,

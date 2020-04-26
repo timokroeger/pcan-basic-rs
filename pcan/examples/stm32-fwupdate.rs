@@ -1,11 +1,9 @@
 use std::{env, error::Error, fmt, fs::File, io};
 
 use anyhow::{anyhow, Result};
+use embedded_hal::can::{Frame, Receiver, Transmitter};
 use nb::block;
-use pcan::{
-    self,
-    can::{Frame, Receiver, Transmitter},
-};
+use pcan;
 
 const BOOTLOADER_BLOCK_LEN: usize = 256;
 
