@@ -50,7 +50,7 @@ pub struct Id {
 }
 
 impl can::Id for Id {
-    fn new(id: u32) -> Self {
+    fn new_standard(id: u32) -> Self {
         assert!(id <= 0x7FF);
         Self { id, eid: false }
     }

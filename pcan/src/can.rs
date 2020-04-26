@@ -5,7 +5,7 @@ pub trait Id {
     ///
     /// Implementors are recommended to panic if the `id` parameter is not in
     /// the range of 0..0x7FF.
-    fn new(id: u32) -> Self;
+    fn new_standard(id: u32) -> Self;
 
     /// Creates a new standard (29bit) identifier
     ///
@@ -36,7 +36,7 @@ pub trait Frame: Sized {
 
     /// TODO
     fn new_standard(id: u32, data: &[u8]) -> Self {
-        Self::new(Self::Id::new(id), data)
+        Self::new(Self::Id::new_standard(id), data)
     }
 
     /// TODO
