@@ -1,0 +1,15 @@
+[package]
+name = "pcan-basic-sys"
+version = "0.1.0"
+authors = ["Timo Kröger <timokroeger93@gmail.com>"]
+edition = "2018"
+links = "PCANBasic"
+description = "FFI bindings for the PCAN-Basic API by PEAK-System Technik GmbH"
+keywords = ["can", "ffi"]
+categories = ["external-ffi-bindings"]
+readme = "README.md"
+license = "proprietary"
+repository = "https://github.com/timokroeger/pcan-basic-sys"
+
+[build-dependencies]
+bindgen = "0.53.2"

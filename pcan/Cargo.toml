@@ -1,0 +1,14 @@
+[package]
+name = "pcan"
+version = "0.1.0"
+authors = ["Timo Kröger <timokroeger93@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+nb = "0.1.2"
+pcan-basic-sys = { path = "../pcan-basic-sys" }
+winapi = { version = "0.3.8", features = ["synchapi"] }
+
+[dev-dependencies]
+anyhow = "1.0"
+thiserror = "1.0"

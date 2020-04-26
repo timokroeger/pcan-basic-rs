@@ -1,0 +1,2 @@
+[workspace]
+members = [ "pcan", "pcan-basic-sys" ]
