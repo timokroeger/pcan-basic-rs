@@ -1,32 +1,34 @@
 use std::{env, error::Error, fmt, fs::File, io};
 
 use anyhow::{anyhow, Result};
-use embedded_hal::can::{Filter, FilteredReceiver, Frame, Receiver, Transmitter};
+use embedded_hal::can::{Filter, FilteredReceiver, Frame, Transmitter};
 use nb::block;
 use pcan;
 
 const BOOTLOADER_BLOCK_LEN: usize = 256;
 
-struct Bootloader<I>(I);
+struct Bootloader<Rx, Tx> {
+    rx: Rx,
+    tx: Tx,
+}
 
-impl<I> Bootloader<I>
+impl<Rx, Tx> Bootloader<Rx, Tx>
 where
-    I: FilteredReceiver + Transmitter,
-    <I as Receiver>::Error: Error + Send + Sync + 'static,
-    <I as Transmitter>::Error: Error + Send + Sync + 'static,
-    <I as Receiver>::Frame: fmt::Debug,
-    <I as Transmitter>::Frame: fmt::Debug,
+    Rx: FilteredReceiver,
+    Rx::Error: Error + Send + Sync + 'static,
+    Rx::Frame: fmt::Debug,
+    Tx: Transmitter,
+    Tx::Error: Error + Send + Sync + 'static,
+    Tx::Frame: fmt::Debug,
 {
-    pub fn new(mut interface: I) -> Self {
+    pub fn new(mut rx: Rx, tx: Tx) -> Self {
         let rx_ids = [0x79, 0x43, 0x31, 0x21];
-        if I::NUM_FILTERS >= rx_ids.len() {
+        if Rx::NUM_FILTERS >= rx_ids.len() {
             // Add filters in a simple list.
             for &rx_id in &rx_ids {
-                interface
-                    .add_filter(&I::Filter::new_standard(rx_id))
-                    .unwrap();
+                rx.add_filter(&Rx::Filter::new_standard(rx_id)).unwrap();
             }
-        } else if I::NUM_MASKS >= 1 {
+        } else if Rx::NUM_MASKS >= 1 {
             // Combine all IDs into a masked filters.
             let mut id = 0;
             let mut mask = 0;
@@ -34,13 +36,12 @@ where
                 id &= rx_id;
                 mask |= rx_id;
             }
-            interface
-                .add_filter(&I::Filter::new_standard(id).set_mask(mask))
+            rx.add_filter(&Rx::Filter::new_standard(id).set_mask(mask))
                 .unwrap();
         } else {
             panic!("Not enough CAN filters are available.");
         }
-        Self(interface)
+        Self { rx, tx }
     }
 
     // The bootloader listens on multiple communication inerfaces.
@@ -96,13 +97,13 @@ where
 
     pub fn send(&mut self, id: u32, data: &[u8]) -> Result<()> {
         block!(self
-            .0
-            .transmit(&<I as Transmitter>::Frame::new_standard(id, data)))?;
+            .tx
+            .transmit(&Tx::Frame::new_standard(id, data)))?;
         Ok(())
     }
 
     fn receive_ack(&mut self, id: u32) -> Result<()> {
-        let msg = block!(self.0.receive())?;
+        let msg = block!(self.rx.receive())?;
         if msg.id() == id && msg.data() == &[0x79] {
             return Ok(());
         }
@@ -120,7 +121,9 @@ fn main() -> anyhow::Result<()> {
     let file_name = file_name.unwrap();
     let mut file = File::open(file_name)?;
 
-    let mut bl = Bootloader::new(pcan::Interface::init()?);
+    let can = pcan::Interface::init()?;
+    let (rx, tx) = can.split();
+    let mut bl = Bootloader::new(rx, tx);
 
     bl.enable()?;
     bl.erase()?;
