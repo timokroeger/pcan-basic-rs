@@ -106,12 +106,12 @@ fn main() -> anyhow::Result<()> {
     bl.erase()?;
     bl.write(0x0800_0000, &mut file)?;
 
-    // Overwrite bootloader magic entry constant at the end of SRAM so that the
-    // device will not switch to bootloader mode again after the GO command.
-    bl.write(0x2000_FFFC, &mut [0u8; 4].as_ref())?;
-
     // Jump the new firmware in flash.
     bl.go(0x0800_0000)?;
+
+    // SCB_VTOR was modified by the bootloader and the vector points to system memory.
+    // The flashed firmware must update SCB_VTOR to use interrupts with the correct
+    // vector table.
 
     Ok(())
 }
