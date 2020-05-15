@@ -13,6 +13,7 @@ use std::{
 
 use embedded_hal::can::{self, Receiver as _};
 use pcan_basic_sys::*;
+use prelude::*;
 use winapi::{
     shared::minwindef::FALSE,
     um::{synchapi, winbase::INFINITE, winnt::HANDLE},
@@ -91,7 +92,18 @@ impl Interface {
     }
 
     pub fn split(&self) -> (Rx, Tx) {
-        (Rx(self), Tx(self))
+        // By default do not receive messages.
+        let mut rx = Rx(self);
+        rx.clear_filters();
+
+        // Drain all messages that were received since `init()` has been called.
+        loop {
+            if let Err(nb::Error::WouldBlock) = rx.receive() {
+                break;
+            }
+        }
+
+        (rx, Tx(self))
     }
 }
 
@@ -211,6 +223,7 @@ impl<'a> can::Receiver for Rx<'a> {
 }
 
 pub struct Filter {
+    accept_all: bool,
     is_extended: bool,
     id: u32,
     mask: u32,
@@ -220,6 +233,7 @@ impl can::Filter for Filter {
     fn accept_all() -> Self {
         // TODO: Fix
         Self {
+            accept_all: true,
             is_extended: true,
             id: 0,
             mask: 0,
@@ -228,6 +242,7 @@ impl can::Filter for Filter {
 
     fn new_standard(id: u32) -> Self {
         Self {
+            accept_all: false,
             is_extended: false,
             id,
             mask: 0x7FF,
@@ -236,6 +251,7 @@ impl can::Filter for Filter {
 
     fn new_extended(id: u32) -> Self {
         Self {
+            accept_all: false,
             is_extended: true,
             id,
             mask: 0x1FFF_FFFF,
@@ -268,25 +284,37 @@ impl<'a> can::FilteredReceiver for Rx<'a> {
             return Err(Error("Cannot configure more than one filter".to_string()));
         }
 
-        let mut value = [filter.mask.to_le(), filter.id.to_le()];
-        unsafe {
-            CAN_SetValue(
-                self.0.pcan_channel,
-                if filter.is_extended {
-                    PCAN_ACCEPTANCE_FILTER_29BIT
-                } else {
-                    PCAN_ACCEPTANCE_FILTER_11BIT
-                } as u8,
-                &mut value as *mut _ as *mut c_void,
-                mem::size_of_val(&value) as u32,
-            );
-        };
+        if filter.accept_all {
+            let mut filter_open = PCAN_FILTER_OPEN;
+            unsafe {
+                CAN_SetValue(
+                    self.0.pcan_channel,
+                    PCAN_MESSAGE_FILTER as u8,
+                    &mut filter_open as *mut _ as *mut c_void,
+                    mem::size_of_val(&filter_open) as u32,
+                );
+            };
+        } else {
+            let mut value = [filter.mask.to_le(), filter.id.to_le()];
+            unsafe {
+                CAN_SetValue(
+                    self.0.pcan_channel,
+                    if filter.is_extended {
+                        PCAN_ACCEPTANCE_FILTER_29BIT
+                    } else {
+                        PCAN_ACCEPTANCE_FILTER_11BIT
+                    } as u8,
+                    &mut value as *mut _ as *mut c_void,
+                    mem::size_of_val(&value) as u32,
+                );
+            };
+        }
 
         Ok(())
     }
 
     fn clear_filters(&mut self) {
-        let mut filter_open = PCAN_FILTER_OPEN;
+        let mut filter_open = PCAN_FILTER_CLOSE;
         unsafe {
             CAN_SetValue(
                 self.0.pcan_channel,
