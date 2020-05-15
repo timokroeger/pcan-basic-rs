@@ -1,6 +1,6 @@
 pub mod prelude {
     pub use embedded_hal::can::{
-        Frame as _, Receiver as _, Transmitter as _,
+        Filter as _, FilteredReceiver as _, Frame as _, Receiver as _, Transmitter as _,
     };
 }
 
@@ -200,15 +200,51 @@ impl can::Receiver for Interface {
     }
 }
 
-/* TODO
-impl can::MessageFilter for Interface {
-    type FilterId = Id;
+pub struct Filter {
+    is_extended: bool,
+    id: u32,
+    mask: u32,
+}
 
-    fn add_filter(&mut self, id: Id) -> Result<(), Self::Error> {
-        self.add_filter_with_mask(id, Id { id: 0, eid: id.eid })
+impl can::Filter for Filter {
+    fn accept_all() -> Self {
+        // TODO: Fix
+        Self {
+            is_extended: true,
+            id: 0,
+            mask: 0,
+        }
     }
 
-    fn add_filter_with_mask(&mut self, id: Id, mask: Id) -> Result<(), Self::Error> {
+    fn new_standard(id: u32) -> Self {
+        Self {
+            is_extended: false,
+            id,
+            mask: 0x7FF,
+        }
+    }
+
+    fn new_extended(id: u32) -> Self {
+        Self {
+            is_extended: true,
+            id,
+            mask: 0x1FFF_FFFF,
+        }
+    }
+
+    fn set_mask(&mut self, mask: u32) -> &mut Self {
+        self.mask = mask;
+        self
+    }
+}
+
+impl can::FilteredReceiver for Interface {
+    type Filter = Filter;
+
+    const NUM_FILTERS: usize = 1;
+    const NUM_MASKS: usize = 1;
+
+    fn add_filter(&mut self, filter: &Self::Filter) -> Result<(), Self::Error> {
         let mut filter_state = 0u32;
         unsafe {
             CAN_GetValue(
@@ -222,11 +258,11 @@ impl can::MessageFilter for Interface {
             return Err(Error("Cannot configure more than one filter".to_string()));
         }
 
-        let mut value = [mask.id.to_le(), id.id.to_le()];
+        let mut value = [filter.mask.to_le(), filter.id.to_le()];
         unsafe {
             CAN_SetValue(
                 self.pcan_channel,
-                if id.eid {
+                if filter.is_extended {
                     PCAN_ACCEPTANCE_FILTER_29BIT
                 } else {
                     PCAN_ACCEPTANCE_FILTER_11BIT
@@ -251,4 +287,3 @@ impl can::MessageFilter for Interface {
         };
     }
 }
-*/
