@@ -1,6 +1,6 @@
 pub mod prelude {
     pub use embedded_hal::can::{
-        Frame as _, Id as _, MessageFilter as _, Receiver as _, Transmitter as _,
+        Frame as _, Receiver as _, Transmitter as _,
     };
 }
 
@@ -40,32 +40,6 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Id {
-    id: u32,
-    eid: bool,
-}
-
-impl can::Id for Id {
-    fn new_standard(id: u32) -> Self {
-        assert!(id <= 0x7FF);
-        Self { id, eid: false }
-    }
-
-    fn new_extended(id: u32) -> Self {
-        assert!(id <= 0x1FFF_FFFF);
-        Self { id, eid: true }
-    }
-
-    fn id(&self) -> u32 {
-        self.id
-    }
-
-    fn is_extended(&self) -> bool {
-        self.eid
-    }
-}
 
 pub struct Interface {
     pcan_channel: u16,
@@ -139,18 +113,12 @@ impl Drop for Interface {
 pub struct Frame(TPCANMsg);
 
 impl can::Frame for Frame {
-    type Id = Id;
-
-    fn new(id: Id, data: &[u8]) -> Self {
+    fn new_standard(id: u32, data: &[u8]) -> Self {
         assert!(data.len() <= 8);
 
         let mut msg = TPCANMsg {
-            ID: id.id,
-            MSGTYPE: if id.eid {
-                PCAN_MESSAGE_EXTENDED
-            } else {
-                PCAN_MESSAGE_STANDARD
-            } as u8,
+            ID: id,
+            MSGTYPE: PCAN_MESSAGE_STANDARD as u8,
             LEN: data.len() as u8,
             DATA: [0; 8],
         };
@@ -158,18 +126,26 @@ impl can::Frame for Frame {
         Self(msg)
     }
 
-    fn new_remote(id: Id) -> Self {
-        Self(TPCANMsg {
-            ID: id.id,
-            MSGTYPE: (PCAN_MESSAGE_RTR
-                | if id.eid {
-                    PCAN_MESSAGE_EXTENDED
-                } else {
-                    PCAN_MESSAGE_STANDARD
-                }) as u8,
-            LEN: 0,
+    fn new_extended(id: u32, data: &[u8]) -> Self {
+        assert!(data.len() <= 8);
+
+        let mut msg = TPCANMsg {
+            ID: id,
+            MSGTYPE: PCAN_MESSAGE_EXTENDED as u8,
+            LEN: data.len() as u8,
             DATA: [0; 8],
-        })
+        };
+        msg.DATA[0..data.len()].copy_from_slice(data);
+        Self(msg)
+    }
+
+    fn set_rtr(&mut self, rtr: bool) -> &mut Self {
+        if rtr {
+            self.0.MSGTYPE |= PCAN_MESSAGE_RTR as u8;
+        } else {
+            self.0.MSGTYPE &= !(PCAN_MESSAGE_RTR as u8);
+        }
+        self
     }
 
     fn is_extended(&self) -> bool {
@@ -224,6 +200,7 @@ impl can::Receiver for Interface {
     }
 }
 
+/* TODO
 impl can::MessageFilter for Interface {
     type FilterId = Id;
 
@@ -274,3 +251,4 @@ impl can::MessageFilter for Interface {
         };
     }
 }
+*/
