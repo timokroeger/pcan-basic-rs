@@ -122,7 +122,9 @@ fn main() -> anyhow::Result<()> {
     let mut file = File::open(file_name)?;
 
     let can = pcan::Interface::init()?;
-    let (rx, tx) = can.split();
+    let (mut rx, tx) = can.split();
+    rx.set_blocking(true);
+
     let mut bl = Bootloader::new(rx, tx);
 
     bl.enable()?;
