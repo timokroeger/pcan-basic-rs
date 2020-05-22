@@ -1,17 +1,19 @@
 pub mod prelude {
     pub use embedded_hal::can::{
-        Filter as _, FilteredReceiver as _, Frame as _, Receiver as _, Transmitter as _,
+        Filter as _, FilterGroup as _, FilteredReceiver as _, Frame as _, Receiver as _,
+        Transmitter as _,
     };
 }
 
 use std::{
     ffi::{c_void, CString},
     fmt,
+    iter::{self, Once},
     mem::{self, MaybeUninit},
     ptr,
 };
 
-use embedded_hal::can::{self, Receiver as _};
+use embedded_hal::can::{self, MaskType, Receiver as _, RtrFilterBehavior};
 use pcan_basic_sys::*;
 use prelude::*;
 use winapi::{
@@ -146,12 +148,11 @@ impl can::Frame for Frame {
         Self(msg)
     }
 
-    fn set_rtr(&mut self, rtr: bool) -> &mut Self {
-        if rtr {
-            self.0.MSGTYPE |= PCAN_MESSAGE_RTR as u8;
-        } else {
-            self.0.MSGTYPE &= !(PCAN_MESSAGE_RTR as u8);
-        }
+    fn with_rtr(&mut self, dlc: usize) -> &mut Self {
+        assert!(dlc < 8);
+
+        self.0.MSGTYPE |= PCAN_MESSAGE_RTR as u8;
+        self.0.LEN = dlc as u8;
         self
     }
 
@@ -165,6 +166,10 @@ impl can::Frame for Frame {
 
     fn id(&self) -> u32 {
         self.0.ID
+    }
+
+    fn dlc(&self) -> usize {
+        self.0.LEN as usize
     }
 
     fn data(&self) -> &[u8] {
@@ -263,19 +268,52 @@ impl can::Filter for Filter {
         }
     }
 
-    fn set_mask(&mut self, mask: u32) -> &mut Self {
+    fn with_mask(&mut self, mask: u32) -> &mut Self {
         self.mask = mask;
         self
+    }
+
+    /// Not supported as reported in the capabilities.
+    fn allow_remote(&mut self) -> &mut Self {
+        self
+    }
+
+    /// Not supported as reported in the capabilities.
+    fn remote_only(&mut self) -> &mut Self {
+        self
+    }
+}
+
+pub struct FilterGroup;
+
+impl can::FilterGroup for FilterGroup {
+    fn num_filters(&self) -> usize {
+        1
+    }
+
+    fn extended(&self) -> bool {
+        true
+    }
+
+    fn mask(&self) -> Option<MaskType> {
+        Some(MaskType::Individual)
+    }
+
+    fn rtr(&self) -> RtrFilterBehavior {
+        RtrFilterBehavior::RemoteAlwaysAllowed
     }
 }
 
 impl<'a> can::FilteredReceiver for Rx<'a> {
     type Filter = Filter;
+    type FilterGroup = FilterGroup;
+    type FilterGroups = Once<FilterGroup>;
 
-    const NUM_FILTERS: usize = 1;
-    const NUM_MASKS: usize = 1;
+    fn filter_groups(&self) -> Once<FilterGroup> {
+        iter::once(FilterGroup)
+    }
 
-    fn add_filter(&mut self, filter: &Self::Filter) -> Result<(), Self::Error> {
+    fn add_filter(&mut self, filter: &Filter) -> Result<(), Error> {
         let mut filter_state = 0u32;
         unsafe {
             CAN_GetValue(

@@ -1,7 +1,7 @@
 use std::{env, error::Error, fmt, fs::File, io};
 
 use anyhow::{anyhow, Result};
-use embedded_hal::can::{Filter, FilteredReceiver, Frame, Transmitter};
+use embedded_hal::can::{Filter, FilterGroup, FilteredReceiver, Frame, Transmitter};
 use nb::block;
 use pcan;
 
@@ -22,13 +22,20 @@ where
     Tx::Frame: fmt::Debug,
 {
     pub fn new(mut rx: Rx, tx: Tx) -> Self {
+        let mut num_filters = 0;
+        let mut has_mask = false;
+        for fc in rx.filter_groups() {
+            num_filters += fc.num_filters();
+            has_mask = has_mask || fc.mask().is_some();
+        }
+
         let rx_ids = [0x79, 0x43, 0x31, 0x21];
-        if Rx::NUM_FILTERS >= rx_ids.len() {
+        if num_filters >= rx_ids.len() {
             // Add filters in a simple list.
             for &rx_id in &rx_ids {
                 rx.add_filter(&Rx::Filter::new_standard(rx_id)).unwrap();
             }
-        } else if Rx::NUM_MASKS >= 1 {
+        } else if has_mask {
             // Combine all IDs into a masked filters.
             let mut id = 0;
             let mut mask = 0;
@@ -36,7 +43,7 @@ where
                 id &= rx_id;
                 mask |= rx_id;
             }
-            rx.add_filter(&Rx::Filter::new_standard(id).set_mask(mask))
+            rx.add_filter(&Rx::Filter::new_standard(id).with_mask(mask))
                 .unwrap();
         } else {
             panic!("Not enough CAN filters are available.");
@@ -96,9 +103,7 @@ where
     }
 
     pub fn send(&mut self, id: u32, data: &[u8]) -> Result<()> {
-        block!(self
-            .tx
-            .transmit(&Tx::Frame::new_standard(id, data)))?;
+        block!(self.tx.transmit(&Tx::Frame::new_standard(id, data)))?;
         Ok(())
     }
 
