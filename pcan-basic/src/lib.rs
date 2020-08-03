@@ -122,8 +122,10 @@ impl Drop for Interface {
 pub struct Frame(TPCANMsg);
 
 impl can::Frame for Frame {
-    fn new_standard(id: u32, data: &[u8]) -> Self {
-        assert!(data.len() <= 8);
+    fn new_standard(id: u32, data: &[u8]) -> Result<Self, ()> {
+        if id > 0x7FF || data.len() > 8 {
+            return Err(());
+        }
 
         let mut msg = TPCANMsg {
             ID: id,
@@ -132,11 +134,13 @@ impl can::Frame for Frame {
             DATA: [0; 8],
         };
         msg.DATA[0..data.len()].copy_from_slice(data);
-        Self(msg)
+        Ok(Self(msg))
     }
 
-    fn new_extended(id: u32, data: &[u8]) -> Self {
-        assert!(data.len() <= 8);
+    fn new_extended(id: u32, data: &[u8]) -> Result<Self, ()> {
+        if id > 0x1FFF_FFFF || data.len() > 8 {
+            return Err(());
+        }
 
         let mut msg = TPCANMsg {
             ID: id,
@@ -145,7 +149,7 @@ impl can::Frame for Frame {
             DATA: [0; 8],
         };
         msg.DATA[0..data.len()].copy_from_slice(data);
-        Self(msg)
+        Ok(Self(msg))
     }
 
     fn with_rtr(&mut self, dlc: usize) -> &mut Self {

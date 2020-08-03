@@ -3,7 +3,7 @@ use std::{env, error::Error, fmt, fs::File, io};
 use anyhow::{anyhow, Result};
 use embedded_hal::can::{Filter, FilterGroup, FilteredReceiver, Frame, Transmitter};
 use nb::block;
-use pcan;
+use pcan_basic;
 
 const BOOTLOADER_BLOCK_LEN: usize = 256;
 
@@ -103,7 +103,8 @@ where
     }
 
     pub fn send(&mut self, id: u32, data: &[u8]) -> Result<()> {
-        block!(self.tx.transmit(&Tx::Frame::new_standard(id, data)))?;
+        let tx_frame = Tx::Frame::new_standard(id, data).unwrap();
+        block!(self.tx.transmit(&tx_frame))?;
         Ok(())
     }
 
@@ -126,7 +127,7 @@ fn main() -> anyhow::Result<()> {
     let file_name = file_name.unwrap();
     let mut file = File::open(file_name)?;
 
-    let can = pcan::Interface::init()?;
+    let can = pcan_basic::Interface::init()?;
     let (mut rx, tx) = can.split();
     rx.set_blocking(true);
 
