@@ -46,6 +46,7 @@ impl std::error::Error for Error {}
 
 pub struct Interface {
     channel: u16,
+    is_blocking: bool,
     event_handle: HANDLE,
 }
 
@@ -87,28 +88,27 @@ impl Interface {
             );
         };
 
-        Ok(Self {
+        let mut this = Self {
             channel: pcan_channel,
-            event_handle,
-        })
-    }
-
-    pub fn split(&self) -> (Rx, Tx) {
-        // By default do not receive messages.
-        let mut rx = Rx {
-            pcan: self,
             is_blocking: false,
+            event_handle,
         };
-        rx.clear_filters();
+
+        // Do not receive any messages by default.
+        this.clear_filters();
 
         // Drain all messages that were received since `init()` has been called.
         loop {
-            if let Err(nb::Error::WouldBlock) = rx.receive() {
+            if let Err(nb::Error::WouldBlock) = this.receive() {
                 break;
             }
         }
 
-        (rx, Tx(self))
+        Ok(this)
+    }
+
+    pub fn set_blocking(&mut self, is_blocking: bool) {
+        self.is_blocking = is_blocking;
     }
 }
 
@@ -181,14 +181,12 @@ impl can::Frame for Frame {
     }
 }
 
-pub struct Tx<'a>(&'a Interface);
-
-impl<'a> can::Transmitter for Tx<'a> {
+impl can::Transmitter for Interface {
     type Frame = Frame;
     type Error = Error;
 
     fn transmit(&mut self, frame: &Self::Frame) -> nb::Result<Option<Self::Frame>, Self::Error> {
-        let result = unsafe { CAN_Write(self.0.channel, &frame.0 as *const _ as *mut _) };
+        let result = unsafe { CAN_Write(self.channel, &frame.0 as *const _ as *mut _) };
         if result == PCAN_ERROR_OK {
             Ok(None)
         } else {
@@ -197,18 +195,7 @@ impl<'a> can::Transmitter for Tx<'a> {
     }
 }
 
-pub struct Rx<'a> {
-    pcan: &'a Interface,
-    is_blocking: bool,
-}
-
-impl<'a> Rx<'a> {
-    pub fn set_blocking(&mut self, is_blocking: bool) {
-        self.is_blocking = is_blocking;
-    }
-}
-
-impl<'a> can::Receiver for Rx<'a> {
+impl can::Receiver for Interface {
     type Frame = Frame;
     type Error = Error;
 
@@ -216,7 +203,7 @@ impl<'a> can::Receiver for Rx<'a> {
         let mut msg = MaybeUninit::<TPCANMsg>::uninit();
         let (result, msg) = unsafe {
             (
-                CAN_Read(self.pcan.channel, msg.as_mut_ptr(), ptr::null_mut()),
+                CAN_Read(self.channel, msg.as_mut_ptr(), ptr::null_mut()),
                 msg.assume_init(),
             )
         };
@@ -224,7 +211,7 @@ impl<'a> can::Receiver for Rx<'a> {
         match result {
             PCAN_ERROR_QRCVEMPTY => {
                 if self.is_blocking {
-                    unsafe { synchapi::WaitForSingleObject(self.pcan.event_handle, INFINITE) };
+                    unsafe { synchapi::WaitForSingleObject(self.event_handle, INFINITE) };
                     self.receive()
                 } else {
                     Err(nb::Error::WouldBlock)
@@ -308,7 +295,7 @@ impl can::FilterGroup for FilterGroup {
     }
 }
 
-impl<'a> can::FilteredReceiver for Rx<'a> {
+impl can::FilteredReceiver for Interface {
     type Filter = Filter;
     type FilterGroup = FilterGroup;
     type FilterGroups = Once<FilterGroup>;
@@ -321,7 +308,7 @@ impl<'a> can::FilteredReceiver for Rx<'a> {
         let mut filter_state = 0u32;
         unsafe {
             CAN_GetValue(
-                self.pcan.channel,
+                self.channel,
                 PCAN_MESSAGE_FILTER as u8,
                 &mut filter_state as *mut _ as *mut c_void,
                 mem::size_of_val(&filter_state) as u32,
@@ -335,7 +322,7 @@ impl<'a> can::FilteredReceiver for Rx<'a> {
             let mut filter_open = PCAN_FILTER_OPEN;
             unsafe {
                 CAN_SetValue(
-                    self.pcan.channel,
+                    self.channel,
                     PCAN_MESSAGE_FILTER as u8,
                     &mut filter_open as *mut _ as *mut c_void,
                     mem::size_of_val(&filter_open) as u32,
@@ -345,7 +332,7 @@ impl<'a> can::FilteredReceiver for Rx<'a> {
             let mut value = [filter.mask.to_le(), filter.id.to_le()];
             unsafe {
                 CAN_SetValue(
-                    self.pcan.channel,
+                    self.channel,
                     if filter.is_extended {
                         PCAN_ACCEPTANCE_FILTER_29BIT
                     } else {
@@ -364,7 +351,7 @@ impl<'a> can::FilteredReceiver for Rx<'a> {
         let mut filter_open = PCAN_FILTER_CLOSE;
         unsafe {
             CAN_SetValue(
-                self.pcan.channel,
+                self.channel,
                 PCAN_MESSAGE_FILTER as u8,
                 &mut filter_open as *mut _ as *mut c_void,
                 mem::size_of_val(&filter_open) as u32,

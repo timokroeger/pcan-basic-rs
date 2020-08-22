@@ -7,24 +7,20 @@ use pcan_basic;
 
 const BOOTLOADER_BLOCK_LEN: usize = 256;
 
-struct Bootloader<Rx, Tx> {
-    rx: Rx,
-    tx: Tx,
+struct Bootloader<Can> {
+    can: Can,
 }
 
-impl<Rx, Tx> Bootloader<Rx, Tx>
+impl<Can, F, E> Bootloader<Can>
 where
-    Rx: FilteredReceiver,
-    Rx::Error: Error + Send + Sync + 'static,
-    Rx::Frame: fmt::Debug,
-    Tx: Transmitter,
-    Tx::Error: Error + Send + Sync + 'static,
-    Tx::Frame: fmt::Debug,
+    F: Frame + fmt::Debug,
+    E: Error + Send + Sync + 'static,
+    Can: FilteredReceiver<Frame = F, Error = E> + Transmitter<Frame = F, Error = E>,
 {
-    pub fn new(mut rx: Rx, tx: Tx) -> Self {
+    pub fn new(mut can: Can) -> Self {
         let mut num_filters = 0;
         let mut has_mask = false;
-        for fc in rx.filter_groups() {
+        for fc in can.filter_groups() {
             num_filters += fc.num_filters();
             has_mask = has_mask || fc.mask().is_some();
         }
@@ -33,7 +29,7 @@ where
         if num_filters >= rx_ids.len() {
             // Add filters in a simple list.
             for &rx_id in &rx_ids {
-                rx.add_filter(&Rx::Filter::new_standard(rx_id)).unwrap();
+                can.add_filter(&Can::Filter::new_standard(rx_id)).unwrap();
             }
         } else if has_mask {
             // Combine all IDs into a masked filters.
@@ -43,12 +39,12 @@ where
                 id &= rx_id;
                 mask |= rx_id;
             }
-            rx.add_filter(&Rx::Filter::new_standard(id).with_mask(mask))
+            can.add_filter(&Can::Filter::new_standard(id).with_mask(mask))
                 .unwrap();
         } else {
             panic!("Not enough CAN filters are available.");
         }
-        Self { rx, tx }
+        Self { can }
     }
 
     // The bootloader listens on multiple communication inerfaces.
@@ -103,13 +99,13 @@ where
     }
 
     pub fn send(&mut self, id: u32, data: &[u8]) -> Result<()> {
-        let tx_frame = Tx::Frame::new_standard(id, data).unwrap();
-        block!(self.tx.transmit(&tx_frame))?;
+        let tx_frame = F::new_standard(id, data).unwrap();
+        block!(self.can.transmit(&tx_frame))?;
         Ok(())
     }
 
     fn receive_ack(&mut self, id: u32) -> Result<()> {
-        let msg = block!(self.rx.receive())?;
+        let msg = block!(self.can.receive())?;
         if msg.id() == id && msg.data() == &[0x79] {
             return Ok(());
         }
@@ -127,11 +123,10 @@ fn main() -> anyhow::Result<()> {
     let file_name = file_name.unwrap();
     let mut file = File::open(file_name)?;
 
-    let can = pcan_basic::Interface::init()?;
-    let (mut rx, tx) = can.split();
-    rx.set_blocking(true);
+    let mut can = pcan_basic::Interface::init()?;
+    can.set_blocking(true);
 
-    let mut bl = Bootloader::new(rx, tx);
+    let mut bl = Bootloader::new(can);
 
     bl.enable()?;
     bl.erase()?;
