@@ -1,7 +1,7 @@
 use std::{env, error::Error, fmt, fs::File, io};
 
 use anyhow::{anyhow, Result};
-use embedded_hal::can::{self, Filter, FilterGroup, Frame};
+use embedded_hal::can::{self, Filter, FilterGroup, Frame, Id};
 use nb::block;
 use pcan_basic;
 
@@ -29,7 +29,8 @@ where
         if num_filters >= rx_ids.len() {
             // Add filters in a simple list.
             for &rx_id in &rx_ids {
-                can.add_filter(&Can::Filter::new_standard(rx_id)).unwrap();
+                can.add_filter(&Can::Filter::new(Id::Standard(rx_id)))
+                    .unwrap();
             }
         } else if has_mask {
             // Combine all IDs into a masked filters.
@@ -39,7 +40,7 @@ where
                 id &= rx_id;
                 mask |= rx_id;
             }
-            can.add_filter(&Can::Filter::new_standard(id).with_mask(mask))
+            can.add_filter(&Can::Filter::new(Id::Standard(id)).with_mask(mask))
                 .unwrap();
         } else {
             panic!("Not enough CAN filters are available.");
@@ -99,14 +100,14 @@ where
     }
 
     pub fn send(&mut self, id: u32, data: &[u8]) -> Result<()> {
-        let tx_frame = Can::Frame::new_standard(id, data).unwrap();
+        let tx_frame = Can::Frame::new(Id::Standard(id), data).unwrap();
         block!(self.can.transmit(&tx_frame))?;
         Ok(())
     }
 
     fn receive_ack(&mut self, id: u32) -> Result<()> {
         let msg = block!(self.can.receive())?;
-        if msg.id() == id && msg.data() == &[0x79] {
+        if msg.id() == Id::Standard(id) && msg.data() == &[0x79] {
             return Ok(());
         }
 

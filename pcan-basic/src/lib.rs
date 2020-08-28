@@ -12,7 +12,7 @@ use std::{
     ptr,
 };
 
-use embedded_hal::can::{self, MaskType, RtrFilterBehavior};
+use embedded_hal::can::{self, Id, MaskType, RtrFilterBehavior};
 use pcan_basic_sys::*;
 use prelude::*;
 use winapi::{
@@ -121,42 +121,35 @@ impl Drop for Interface {
 pub struct Frame(TPCANMsg);
 
 impl can::Frame for Frame {
-    fn new_standard(id: u32, data: &[u8]) -> Result<Self, ()> {
-        if id > 0x7FF || data.len() > 8 {
+    fn new(id: Id, data: &[u8]) -> Result<Frame, ()> {
+        if !id.valid() || data.len() > 8 {
             return Err(());
         }
 
+        let (id, msg_type) = match id {
+            Id::Standard(id) => (id as u32, PCAN_MESSAGE_STANDARD),
+            Id::Extended(id) => (id, PCAN_MESSAGE_EXTENDED),
+        };
+
         let mut msg = TPCANMsg {
             ID: id,
-            MSGTYPE: PCAN_MESSAGE_STANDARD as u8,
+            MSGTYPE: msg_type as u8,
             LEN: data.len() as u8,
             DATA: [0; 8],
         };
         msg.DATA[0..data.len()].copy_from_slice(data);
-        Ok(Self(msg))
+        Ok(Frame(msg))
     }
 
-    fn new_extended(id: u32, data: &[u8]) -> Result<Self, ()> {
-        if id > 0x1FFF_FFFF || data.len() > 8 {
+    fn new_remote(id: Id, dlc: usize) -> Result<Frame, ()> {
+        if dlc >= 8 {
             return Err(());
         }
 
-        let mut msg = TPCANMsg {
-            ID: id,
-            MSGTYPE: PCAN_MESSAGE_EXTENDED as u8,
-            LEN: data.len() as u8,
-            DATA: [0; 8],
-        };
-        msg.DATA[0..data.len()].copy_from_slice(data);
-        Ok(Self(msg))
-    }
-
-    fn with_rtr(&mut self, dlc: usize) -> &mut Self {
-        assert!(dlc < 8);
-
-        self.0.MSGTYPE |= PCAN_MESSAGE_RTR as u8;
-        self.0.LEN = dlc as u8;
-        self
+        let mut frame = Frame::new(id, &[])?;
+        frame.0.MSGTYPE |= PCAN_MESSAGE_RTR as u8;
+        frame.0.LEN = dlc as u8;
+        Ok(frame)
     }
 
     fn is_extended(&self) -> bool {
@@ -167,8 +160,12 @@ impl can::Frame for Frame {
         self.0.MSGTYPE & PCAN_MESSAGE_RTR as u8 != 0
     }
 
-    fn id(&self) -> u32 {
-        self.0.ID
+    fn id(&self) -> Id {
+        if self.is_extended() {
+            Id::Extended(self.0.ID)
+        } else {
+            Id::Standard(self.0.ID)
+        }
     }
 
     fn dlc(&self) -> usize {
@@ -184,7 +181,7 @@ impl can::Can for Interface {
     type Frame = Frame;
     type Error = Error;
 
-    fn transmit(&mut self, frame: &Self::Frame) -> nb::Result<Option<Self::Frame>, Self::Error> {
+    fn transmit(&mut self, frame: &Frame) -> nb::Result<Option<Frame>, Error> {
         let result = unsafe { CAN_Write(self.channel, &frame.0 as *const _ as *mut _) };
         if result == PCAN_ERROR_OK {
             Ok(None)
@@ -193,7 +190,7 @@ impl can::Can for Interface {
         }
     }
 
-    fn receive(&mut self) -> nb::Result<Self::Frame, Self::Error> {
+    fn receive(&mut self) -> nb::Result<Frame, Error> {
         let mut msg = MaybeUninit::<TPCANMsg>::uninit();
         let (result, msg) = unsafe {
             (
@@ -235,21 +232,20 @@ impl can::Filter for Filter {
         }
     }
 
-    fn new_standard(id: u32) -> Self {
-        Self {
-            accept_all: false,
-            is_extended: false,
-            id,
-            mask: 0x7FF,
-        }
-    }
-
-    fn new_extended(id: u32) -> Self {
-        Self {
-            accept_all: false,
-            is_extended: true,
-            id,
-            mask: 0x1FFF_FFFF,
+    fn new(id: Id) -> Self {
+        match id {
+            Id::Standard(id) => Self {
+                accept_all: false,
+                is_extended: false,
+                id: id as u32,
+                mask: 0x7FF,
+            },
+            Id::Extended(id) => Self {
+                accept_all: false,
+                is_extended: true,
+                id,
+                mask: 0x1FFF_FFFF,
+            },
         }
     }
 
