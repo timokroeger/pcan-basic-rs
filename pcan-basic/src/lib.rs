@@ -1,7 +1,6 @@
 pub mod prelude {
     pub use embedded_hal::can::{
-        Filter as _, FilterGroup as _, FilteredReceiver as _, Frame as _, Receiver as _,
-        Transmitter as _,
+        Can as _, Filter as _, FilterGroup as _, FilteredReceiver as _, Frame as _,
     };
 }
 
@@ -13,7 +12,7 @@ use std::{
     ptr,
 };
 
-use embedded_hal::can::{self, MaskType, Receiver as _, RtrFilterBehavior};
+use embedded_hal::can::{self, MaskType, RtrFilterBehavior};
 use pcan_basic_sys::*;
 use prelude::*;
 use winapi::{
@@ -181,7 +180,7 @@ impl can::Frame for Frame {
     }
 }
 
-impl can::Transmitter for Interface {
+impl can::Can for Interface {
     type Frame = Frame;
     type Error = Error;
 
@@ -193,11 +192,6 @@ impl can::Transmitter for Interface {
             Err(nb::Error::Other(Error::new(result)))
         }
     }
-}
-
-impl can::Receiver for Interface {
-    type Frame = Frame;
-    type Error = Error;
 
     fn receive(&mut self) -> nb::Result<Self::Frame, Self::Error> {
         let mut msg = MaybeUninit::<TPCANMsg>::uninit();

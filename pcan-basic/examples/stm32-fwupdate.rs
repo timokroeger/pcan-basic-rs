@@ -1,7 +1,7 @@
 use std::{env, error::Error, fmt, fs::File, io};
 
 use anyhow::{anyhow, Result};
-use embedded_hal::can::{Filter, FilterGroup, FilteredReceiver, Frame, Transmitter};
+use embedded_hal::can::{self, Filter, FilterGroup, Frame};
 use nb::block;
 use pcan_basic;
 
@@ -11,11 +11,11 @@ struct Bootloader<Can> {
     can: Can,
 }
 
-impl<Can, F, E> Bootloader<Can>
+impl<Can> Bootloader<Can>
 where
-    F: Frame + fmt::Debug,
-    E: Error + Send + Sync + 'static,
-    Can: FilteredReceiver<Frame = F, Error = E> + Transmitter<Frame = F, Error = E>,
+    Can: can::Can + can::FilteredReceiver,
+    Can::Frame: fmt::Debug,
+    Can::Error: Error + Send + Sync + 'static,
 {
     pub fn new(mut can: Can) -> Self {
         let mut num_filters = 0;
@@ -99,7 +99,7 @@ where
     }
 
     pub fn send(&mut self, id: u32, data: &[u8]) -> Result<()> {
-        let tx_frame = F::new_standard(id, data).unwrap();
+        let tx_frame = Can::Frame::new_standard(id, data).unwrap();
         block!(self.can.transmit(&tx_frame))?;
         Ok(())
     }
