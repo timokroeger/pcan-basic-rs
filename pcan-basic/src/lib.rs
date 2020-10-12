@@ -292,7 +292,7 @@ impl Interface {
         Ok(())
     }
 
-    fn clear_filters(&mut self) {
+    pub fn clear_filters(&mut self) {
         let mut filter_open = PCAN_FILTER_CLOSE;
         unsafe {
             CAN_SetValue(
