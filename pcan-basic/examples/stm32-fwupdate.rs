@@ -1,7 +1,7 @@
 use std::{env, error::Error, fmt, fs::File, io};
 
 use anyhow::{anyhow, Result};
-use embedded_hal::can::{self, Filter, FilterGroup, Frame, Id};
+use embedded_hal::can::{self, Frame, Id};
 use nb::block;
 use pcan_basic;
 
@@ -13,38 +13,11 @@ struct Bootloader<Can> {
 
 impl<Can> Bootloader<Can>
 where
-    Can: can::Can + can::FilteredReceiver,
+    Can: can::Can,
     Can::Frame: fmt::Debug,
     Can::Error: Error + Send + Sync + 'static,
 {
-    pub fn new(mut can: Can) -> Self {
-        let mut num_filters = 0;
-        let mut has_mask = false;
-        for fc in can.filter_groups() {
-            num_filters += fc.num_filters();
-            has_mask = has_mask || fc.mask().is_some();
-        }
-
-        let rx_ids = [0x79, 0x43, 0x31, 0x21];
-        if num_filters >= rx_ids.len() {
-            // Add filters in a simple list.
-            for &rx_id in &rx_ids {
-                can.add_filter(&Can::Filter::new(Id::Standard(rx_id)))
-                    .unwrap();
-            }
-        } else if has_mask {
-            // Combine all IDs into a masked filters.
-            let mut id = 0;
-            let mut mask = 0;
-            for &rx_id in &rx_ids {
-                id &= rx_id;
-                mask |= rx_id;
-            }
-            can.add_filter(&Can::Filter::new(Id::Standard(id)).with_mask(mask))
-                .unwrap();
-        } else {
-            panic!("Not enough CAN filters are available.");
-        }
+    pub fn new(can: Can) -> Self {
         Self { can }
     }
 

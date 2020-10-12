@@ -1,18 +1,14 @@
 pub mod prelude {
-    pub use embedded_hal::can::{
-        Can as _, Filter as _, FilterGroup as _, FilteredReceiver as _, Frame as _,
-    };
+    pub use embedded_hal::can::{Can as _, Frame as _, Id};
 }
 
 use std::{
     ffi::{c_void, CString},
     fmt,
-    iter::{self, Once},
     mem::{self, MaybeUninit},
     ptr,
 };
 
-use embedded_hal::can::{self, Id, MaskType, RtrFilterBehavior};
 use pcan_basic_sys::*;
 use prelude::*;
 use winapi::{
@@ -93,9 +89,6 @@ impl Interface {
             event_handle,
         };
 
-        // Do not receive any messages by default.
-        this.clear_filters();
-
         // Drain all messages that were received since `init()` has been called.
         loop {
             if let Err(nb::Error::WouldBlock) = this.receive() {
@@ -120,7 +113,7 @@ impl Drop for Interface {
 #[derive(Debug)]
 pub struct Frame(TPCANMsg);
 
-impl can::Frame for Frame {
+impl embedded_hal::can::Frame for Frame {
     fn new(id: Id, data: &[u8]) -> Result<Frame, ()> {
         if !id.valid() || data.len() > 8 {
             return Err(());
@@ -177,7 +170,7 @@ impl can::Frame for Frame {
     }
 }
 
-impl can::Can for Interface {
+impl embedded_hal::can::Can for Interface {
     type Frame = Frame;
     type Error = Error;
 
@@ -221,8 +214,8 @@ pub struct Filter {
     mask: u32,
 }
 
-impl can::Filter for Filter {
-    fn accept_all() -> Self {
+impl Filter {
+    pub fn accept_all() -> Self {
         // TODO: Fix
         Self {
             accept_all: true,
@@ -232,7 +225,7 @@ impl can::Filter for Filter {
         }
     }
 
-    fn new(id: Id) -> Self {
+    pub fn new(id: Id) -> Self {
         match id {
             Id::Standard(id) => Self {
                 accept_all: false,
@@ -249,52 +242,14 @@ impl can::Filter for Filter {
         }
     }
 
-    fn with_mask(&mut self, mask: u32) -> &mut Self {
+    pub fn with_mask(&mut self, mask: u32) -> &mut Self {
         self.mask = mask;
         self
     }
-
-    /// Not supported as reported in the capabilities.
-    fn allow_remote(&mut self) -> &mut Self {
-        self
-    }
-
-    /// Not supported as reported in the capabilities.
-    fn remote_only(&mut self) -> &mut Self {
-        self
-    }
 }
 
-pub struct FilterGroup;
-
-impl can::FilterGroup for FilterGroup {
-    fn num_filters(&self) -> usize {
-        1
-    }
-
-    fn extended(&self) -> bool {
-        true
-    }
-
-    fn mask(&self) -> Option<MaskType> {
-        Some(MaskType::Individual)
-    }
-
-    fn rtr(&self) -> RtrFilterBehavior {
-        RtrFilterBehavior::RemoteAlwaysAllowed
-    }
-}
-
-impl can::FilteredReceiver for Interface {
-    type Filter = Filter;
-    type FilterGroup = FilterGroup;
-    type FilterGroups = Once<FilterGroup>;
-
-    fn filter_groups(&self) -> Once<FilterGroup> {
-        iter::once(FilterGroup)
-    }
-
-    fn add_filter(&mut self, filter: &Filter) -> Result<(), Error> {
+impl Interface {
+    pub fn add_filter(&mut self, filter: &Filter) -> Result<(), Error> {
         let mut filter_state = 0u32;
         unsafe {
             CAN_GetValue(
