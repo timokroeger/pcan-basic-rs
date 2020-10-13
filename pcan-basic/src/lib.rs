@@ -170,10 +170,7 @@ impl embedded_hal::can::Frame for Frame {
     }
 }
 
-impl embedded_hal::can::Can for Interface {
-    type Frame = Frame;
-    type Error = Error;
-
+impl Interface {
     fn transmit(&mut self, frame: &Frame) -> nb::Result<Option<Frame>, Error> {
         let result = unsafe { CAN_Write(self.channel, &frame.0 as *const _ as *mut _) };
         if result == PCAN_ERROR_OK {
@@ -204,6 +201,19 @@ impl embedded_hal::can::Can for Interface {
             PCAN_ERROR_OK => Ok(Frame(msg)),
             _ => Err(nb::Error::Other(Error::new(result))),
         }
+    }
+}
+
+impl embedded_hal::can::Can for Interface {
+    type Frame = Frame;
+    type Error = Error;
+
+    fn try_transmit(&mut self, frame: &Frame) -> nb::Result<Option<Frame>, Error> {
+        self.transmit(frame)
+    }
+
+    fn try_receive(&mut self) -> nb::Result<Frame, Error> {
+        self.receive()
     }
 }
 

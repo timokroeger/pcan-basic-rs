@@ -74,12 +74,12 @@ where
 
     pub fn send(&mut self, id: u32, data: &[u8]) -> Result<()> {
         let tx_frame = Can::Frame::new(Id::Standard(id), data).unwrap();
-        block!(self.can.transmit(&tx_frame))?;
+        block!(self.can.try_transmit(&tx_frame))?;
         Ok(())
     }
 
     fn receive_ack(&mut self, id: u32) -> Result<()> {
-        let msg = block!(self.can.receive())?;
+        let msg = block!(self.can.try_receive())?;
         if msg.id() == Id::Standard(id) && msg.data() == &[0x79] {
             return Ok(());
         }
