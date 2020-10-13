@@ -41,7 +41,6 @@ impl std::error::Error for Error {}
 
 pub struct Interface {
     channel: u16,
-    is_blocking: bool,
     event_handle: HANDLE,
 }
 
@@ -85,7 +84,6 @@ impl Interface {
 
         let mut this = Self {
             channel: pcan_channel,
-            is_blocking: false,
             event_handle,
         };
 
@@ -97,10 +95,6 @@ impl Interface {
         }
 
         Ok(this)
-    }
-
-    pub fn set_blocking(&mut self, is_blocking: bool) {
-        self.is_blocking = is_blocking;
     }
 }
 
@@ -190,14 +184,7 @@ impl Interface {
         };
 
         match result {
-            PCAN_ERROR_QRCVEMPTY => {
-                if self.is_blocking {
-                    unsafe { synchapi::WaitForSingleObject(self.event_handle, INFINITE) };
-                    self.receive()
-                } else {
-                    Err(nb::Error::WouldBlock)
-                }
-            }
+            PCAN_ERROR_QRCVEMPTY => Err(nb::Error::WouldBlock),
             PCAN_ERROR_OK => Ok(Frame(msg)),
             _ => Err(nb::Error::Other(Error::new(result))),
         }
@@ -214,6 +201,34 @@ impl embedded_hal::can::Can for Interface {
 
     fn try_receive(&mut self) -> nb::Result<Frame, Error> {
         self.receive()
+    }
+}
+
+impl embedded_hal::blocking::can::Can for Interface {
+    type Frame = Frame;
+    type Error = Error;
+
+    fn try_transmit(&mut self, frame: &Frame) -> Result<(), Error> {
+        match self.transmit(frame) {
+            Ok(_) => Ok(()),
+            Err(nb::Error::Other(err)) => Err(err),
+            _ => panic!("The PCAN driver should never block!"),
+        }
+    }
+
+    fn try_receive(&mut self) -> Result<Frame, Error> {
+        match self.receive() {
+            Err(nb::Error::WouldBlock) => {
+                unsafe { synchapi::WaitForSingleObject(self.event_handle, INFINITE) };
+                match self.receive() {
+                    Ok(frame) => Ok(frame),
+                    Err(nb::Error::Other(err)) => Err(err),
+                    _ => panic!("Receive queue should not be empty!"),
+                }
+            }
+            Ok(frame) => Ok(frame),
+            Err(nb::Error::Other(err)) => Err(err),
+        }
     }
 }
 
