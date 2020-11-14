@@ -1,5 +1,5 @@
 pub mod prelude {
-    pub use embedded_hal::can::{Can as _, Frame as _, Id};
+    pub use embedded_can::{Can as _, Frame as _, Id};
 }
 
 use std::{
@@ -107,7 +107,7 @@ impl Drop for Interface {
 #[derive(Debug)]
 pub struct Frame(TPCANMsg);
 
-impl embedded_hal::can::Frame for Frame {
+impl embedded_can::Frame for Frame {
     fn new(id: Id, data: &[u8]) -> Result<Frame, ()> {
         if !id.valid() || data.len() > 8 {
             return Err(());
@@ -191,7 +191,7 @@ impl Interface {
     }
 }
 
-impl embedded_hal::can::Can for Interface {
+impl embedded_can::Can for Interface {
     type Frame = Frame;
     type Error = Error;
 
@@ -204,11 +204,11 @@ impl embedded_hal::can::Can for Interface {
     }
 }
 
-impl embedded_hal::blocking::can::Can for Interface {
+impl embedded_can::blocking::Can for Interface {
     type Frame = Frame;
     type Error = Error;
 
-    fn try_transmit(&mut self, frame: &Frame) -> Result<(), Error> {
+    fn try_write(&mut self, frame: &Frame) -> Result<(), Error> {
         match self.transmit(frame) {
             Ok(_) => Ok(()),
             Err(nb::Error::Other(err)) => Err(err),
@@ -216,7 +216,7 @@ impl embedded_hal::blocking::can::Can for Interface {
         }
     }
 
-    fn try_receive(&mut self) -> Result<Frame, Error> {
+    fn try_read(&mut self) -> Result<Frame, Error> {
         match self.receive() {
             Err(nb::Error::WouldBlock) => {
                 unsafe { synchapi::WaitForSingleObject(self.event_handle, INFINITE) };

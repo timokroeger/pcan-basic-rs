@@ -1,7 +1,7 @@
 use std::{env, error::Error, fmt, fs::File, io};
 
 use anyhow::{anyhow, Result};
-use embedded_hal::can::{Frame, Id};
+use embedded_can::{Frame, Id};
 use pcan_basic;
 
 const BOOTLOADER_BLOCK_LEN: usize = 256;
@@ -12,7 +12,7 @@ struct Bootloader<Can> {
 
 impl<Can> Bootloader<Can>
 where
-    Can: embedded_hal::blocking::can::Can,
+    Can: embedded_can::blocking::Can,
     Can::Frame: fmt::Debug,
     Can::Error: Error + Send + Sync + 'static,
 {
@@ -73,12 +73,12 @@ where
 
     pub fn send(&mut self, id: u32, data: &[u8]) -> Result<()> {
         let tx_frame = Can::Frame::new(Id::Standard(id), data).unwrap();
-        self.can.try_transmit(&tx_frame)?;
+        self.can.try_write(&tx_frame)?;
         Ok(())
     }
 
     fn receive_ack(&mut self, id: u32) -> Result<()> {
-        let msg = self.can.try_receive()?;
+        let msg = self.can.try_read()?;
         if msg.id() == Id::Standard(id) && msg.data() == &[0x79] {
             return Ok(());
         }
