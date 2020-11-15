@@ -71,15 +71,15 @@ where
         self.receive_ack(0x21)
     }
 
-    pub fn send(&mut self, id: u32, data: &[u8]) -> Result<()> {
-        let tx_frame = Can::Frame::new(Id::Standard(id), data).unwrap();
+    pub fn send(&mut self, id: u16, data: &[u8]) -> Result<()> {
+        let tx_frame = Can::Frame::new(Id::new_standard(id).unwrap(), data).unwrap();
         self.can.try_write(&tx_frame)?;
         Ok(())
     }
 
-    fn receive_ack(&mut self, id: u32) -> Result<()> {
+    fn receive_ack(&mut self, id: u16) -> Result<()> {
         let msg = self.can.try_read()?;
-        if msg.id() == Id::Standard(id) && msg.data() == &[0x79] {
+        if msg.id() == Id::new_standard(id).unwrap() && msg.data() == &[0x79] {
             return Ok(());
         }
 

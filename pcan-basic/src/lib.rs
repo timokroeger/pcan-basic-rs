@@ -1,5 +1,5 @@
 pub mod prelude {
-    pub use embedded_can::{Can as _, Frame as _, Id};
+    pub use embedded_can::{Can as _, ExtendedId, Frame as _, Id, StandardId};
 }
 
 use std::{
@@ -109,13 +109,13 @@ pub struct Frame(TPCANMsg);
 
 impl embedded_can::Frame for Frame {
     fn new(id: Id, data: &[u8]) -> Result<Frame, ()> {
-        if !id.valid() || data.len() > 8 {
+        if data.len() > 8 {
             return Err(());
         }
 
         let (id, msg_type) = match id {
-            Id::Standard(id) => (id as u32, PCAN_MESSAGE_STANDARD),
-            Id::Extended(id) => (id, PCAN_MESSAGE_EXTENDED),
+            Id::Standard(id) => (id.into(), PCAN_MESSAGE_STANDARD),
+            Id::Extended(id) => (id.into(), PCAN_MESSAGE_EXTENDED),
         };
 
         let mut msg = TPCANMsg {
@@ -149,9 +149,9 @@ impl embedded_can::Frame for Frame {
 
     fn id(&self) -> Id {
         if self.is_extended() {
-            Id::Extended(self.0.ID)
+            Id::new_extended(self.0.ID).unwrap()
         } else {
-            Id::Standard(self.0.ID)
+            Id::new_standard(self.0.ID as u16).unwrap()
         }
     }
 
@@ -255,13 +255,13 @@ impl Filter {
             Id::Standard(id) => Self {
                 accept_all: false,
                 is_extended: false,
-                id: id as u32,
+                id: id.into(),
                 mask: 0x7FF,
             },
             Id::Extended(id) => Self {
                 accept_all: false,
                 is_extended: true,
-                id,
+                id: id.into(),
                 mask: 0x1FFF_FFFF,
             },
         }
