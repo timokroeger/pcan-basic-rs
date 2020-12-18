@@ -1,6 +1,8 @@
 pub mod prelude {
-    pub use embedded_can::{Can as _, ExtendedId, Frame as _, Id, StandardId};
+    pub use embedded_can::{Can as _, Frame as _};
 }
+
+pub use embedded_can::{ExtendedId, Id, StandardId};
 
 use std::{
     ffi::{c_void, CString},
@@ -10,7 +12,6 @@ use std::{
 };
 
 use pcan_basic_sys::*;
-use prelude::*;
 use winapi::{
     shared::minwindef::FALSE,
     um::{synchapi, winbase::INFINITE, winnt::HANDLE},
@@ -108,14 +109,14 @@ impl Drop for Interface {
 pub struct Frame(TPCANMsg);
 
 impl embedded_can::Frame for Frame {
-    fn new(id: Id, data: &[u8]) -> Result<Frame, ()> {
+    fn new(id: impl Into<Id>, data: &[u8]) -> Result<Frame, ()> {
         if data.len() > 8 {
             return Err(());
         }
 
-        let (id, msg_type) = match id {
-            Id::Standard(id) => (id.into(), PCAN_MESSAGE_STANDARD),
-            Id::Extended(id) => (id.into(), PCAN_MESSAGE_EXTENDED),
+        let (id, msg_type) = match id.into() {
+            Id::Standard(id) => (id.as_raw() as u32, PCAN_MESSAGE_STANDARD),
+            Id::Extended(id) => (id.as_raw(), PCAN_MESSAGE_EXTENDED),
         };
 
         let mut msg = TPCANMsg {
@@ -128,7 +129,7 @@ impl embedded_can::Frame for Frame {
         Ok(Frame(msg))
     }
 
-    fn new_remote(id: Id, dlc: usize) -> Result<Frame, ()> {
+    fn new_remote(id: impl Into<Id>, dlc: usize) -> Result<Frame, ()> {
         if dlc >= 8 {
             return Err(());
         }
@@ -149,9 +150,9 @@ impl embedded_can::Frame for Frame {
 
     fn id(&self) -> Id {
         if self.is_extended() {
-            Id::new_extended(self.0.ID).unwrap()
+            ExtendedId::new(self.0.ID).unwrap().into()
         } else {
-            Id::new_standard(self.0.ID as u16).unwrap()
+            StandardId::new(self.0.ID as u16).unwrap().into()
         }
     }
 
@@ -255,13 +256,13 @@ impl Filter {
             Id::Standard(id) => Self {
                 accept_all: false,
                 is_extended: false,
-                id: id.into(),
+                id: id.as_raw() as u32,
                 mask: 0x7FF,
             },
             Id::Extended(id) => Self {
                 accept_all: false,
                 is_extended: true,
-                id: id.into(),
+                id: id.as_raw(),
                 mask: 0x1FFF_FFFF,
             },
         }

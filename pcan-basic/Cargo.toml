@@ -5,7 +5,7 @@ authors = ["Timo Kröger <timokroeger93@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-embedded-can = "0.2.0"
+embedded-can = "0.3.0"
 nb = "1.0.0"
 pcan-basic-sys = { path = "../pcan-basic-sys" }
 winapi = { version = "0.3.8", features = ["synchapi"] }

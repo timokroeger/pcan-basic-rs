@@ -1,8 +1,7 @@
 use std::{env, error::Error, fmt, fs::File, io};
 
 use anyhow::{anyhow, Result};
-use embedded_can::{Frame, Id};
-use pcan_basic;
+use embedded_can::{Frame, StandardId};
 
 const BOOTLOADER_BLOCK_LEN: usize = 256;
 
@@ -72,14 +71,14 @@ where
     }
 
     pub fn send(&mut self, id: u16, data: &[u8]) -> Result<()> {
-        let tx_frame = Can::Frame::new(Id::new_standard(id).unwrap(), data).unwrap();
+        let tx_frame = Can::Frame::new(StandardId::new(id).unwrap(), data).unwrap();
         self.can.try_write(&tx_frame)?;
         Ok(())
     }
 
     fn receive_ack(&mut self, id: u16) -> Result<()> {
         let msg = self.can.try_read()?;
-        if msg.id() == Id::new_standard(id).unwrap() && msg.data() == &[0x79] {
+        if msg.id() == StandardId::new(id).unwrap().into() && msg.data() == &[0x79] {
             return Ok(());
         }
 
