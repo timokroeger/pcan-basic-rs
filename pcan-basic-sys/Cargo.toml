@@ -10,6 +10,3 @@ categories = ["external-ffi-bindings"]
 readme = "README.md"
 license = "proprietary"
 repository = "https://github.com/timokroeger/pcan-basic-sys"
-
-[build-dependencies]
-bindgen = "0.53.2"
