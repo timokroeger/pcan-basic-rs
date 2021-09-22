@@ -1,5 +1,7 @@
 pub mod prelude {
-    pub use embedded_can::{Can as _, Frame as _};
+    pub use embedded_can::blocking::Can as _;
+    pub use embedded_can::nb::Can as _;
+    pub use embedded_can::Frame as _;
 }
 
 pub use embedded_can::{ExtendedId, Id, StandardId};
@@ -192,15 +194,15 @@ impl Interface {
     }
 }
 
-impl embedded_can::Can for Interface {
+impl embedded_can::nb::Can for Interface {
     type Frame = Frame;
     type Error = Error;
 
-    fn try_transmit(&mut self, frame: &Frame) -> nb::Result<Option<Frame>, Error> {
+    fn transmit(&mut self, frame: &Frame) -> nb::Result<Option<Frame>, Error> {
         self.transmit(frame)
     }
 
-    fn try_receive(&mut self) -> nb::Result<Frame, Error> {
+    fn receive(&mut self) -> nb::Result<Frame, Error> {
         self.receive()
     }
 }
@@ -209,7 +211,7 @@ impl embedded_can::blocking::Can for Interface {
     type Frame = Frame;
     type Error = Error;
 
-    fn try_write(&mut self, frame: &Frame) -> Result<(), Error> {
+    fn write(&mut self, frame: &Frame) -> Result<(), Error> {
         match self.transmit(frame) {
             Ok(_) => Ok(()),
             Err(nb::Error::Other(err)) => Err(err),
@@ -217,7 +219,7 @@ impl embedded_can::blocking::Can for Interface {
         }
     }
 
-    fn try_read(&mut self) -> Result<Frame, Error> {
+    fn read(&mut self) -> Result<Frame, Error> {
         match self.receive() {
             Err(nb::Error::WouldBlock) => {
                 unsafe { synchapi::WaitForSingleObject(self.event_handle, INFINITE) };

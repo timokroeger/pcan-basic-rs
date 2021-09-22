@@ -8,8 +8,8 @@ where
     Can::Error: core::fmt::Debug,
 {
     pub fn echo(&mut self) {
-        let frame = self.0.try_read().unwrap();
-        self.0.try_write(&frame).unwrap();
+        let frame = self.0.read().unwrap();
+        self.0.write(&frame).unwrap();
     }
 }
 

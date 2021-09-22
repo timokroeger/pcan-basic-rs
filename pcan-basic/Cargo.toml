@@ -5,7 +5,7 @@ authors = ["Timo Kröger <timokroeger93@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-embedded-can = "0.3.0"
+embedded-can = { git = "https://github.com/timokroeger/embedded-can", branch = "eh-take-4" }
 nb = "1.0.0"
 pcan-basic-sys = { path = "../pcan-basic-sys" }
 winapi = { version = "0.3.9", features = ["winbase", "synchapi"] }

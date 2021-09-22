@@ -19,8 +19,8 @@ where
         Self { can }
     }
 
-    // The bootloader listens on multiple communication inerfaces.
-    // Send a synchronization message so it locks on the CAN interface.
+    // The bootloader listens on multiple communication interfaces.
+    // Send a synchronization message so it locks to the CAN interface.
     pub fn enable(&mut self) -> Result<()> {
         self.send(0x79, &[])?;
         self.receive_ack(0x79)
@@ -72,12 +72,12 @@ where
 
     pub fn send(&mut self, id: u16, data: &[u8]) -> Result<()> {
         let tx_frame = Can::Frame::new(StandardId::new(id).unwrap(), data).unwrap();
-        self.can.try_write(&tx_frame)?;
+        self.can.write(&tx_frame)?;
         Ok(())
     }
 
     fn receive_ack(&mut self, id: u16) -> Result<()> {
-        let msg = self.can.try_read()?;
+        let msg = self.can.read()?;
         if msg.id() == StandardId::new(id).unwrap().into() && msg.data() == &[0x79] {
             return Ok(());
         }
